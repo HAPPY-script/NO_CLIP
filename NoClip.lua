@@ -1,5 +1,6 @@
 local NoClipGui = Instance.new("ScreenGui")
 NoClipGui.Name = "NoClipGui"
+NoClipGui.ResetOnSpawn = false
 NoClipGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 NoClipGui.DisplayOrder = 1000
 NoClipGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
@@ -100,6 +101,9 @@ local closeButton = frame:WaitForChild("CloseButton")
 
 local noclipEnabled = false
 local noclipConnection
+local descAddedConn
+
+local originalStates = {}
 
 local function setToggle(state)
 	noclipEnabled = state
@@ -110,30 +114,54 @@ local function setToggle(state)
 		or Color3.fromRGB(255, 0, 0)
 end
 
-local function disableCollision(char)
-	for _, v in ipairs(char:GetDescendants()) do
-		if v:IsA("BasePart") then
-			v.CanCollide = false
+local function registerPart(part)
+	if not part:IsA("BasePart") then
+		return
+	end
+
+	if originalStates[part] == nil then
+		originalStates[part] = part.CanCollide
+	end
+end
+
+local function applyNoclip()
+	for part, original in pairs(originalStates) do
+		if part and part.Parent and original == true then
+			part.CanCollide = false
 		end
 	end
 end
 
-local function enableCollision(char)
-	for _, v in ipairs(char:GetDescendants()) do
-		if v:IsA("BasePart") then
-			v.CanCollide = true
+local function restoreCollision()
+	for part, original in pairs(originalStates) do
+		if part and part.Parent then
+			part.CanCollide = original
 		end
 	end
 end
 
-local function startNoclip()
+local function startNoclip(char)
+	table.clear(originalStates)
+
+	for _, v in ipairs(char:GetDescendants()) do
+		registerPart(v)
+	end
+
+	if descAddedConn then
+		descAddedConn:Disconnect()
+	end
+
+	descAddedConn = char.DescendantAdded:Connect(function(v)
+		registerPart(v)
+	end)
+
 	if noclipConnection then
 		noclipConnection:Disconnect()
 	end
 
 	noclipConnection = RunService.Stepped:Connect(function()
 		if noclipEnabled and character then
-			disableCollision(character)
+			applyNoclip()
 		end
 	end)
 end
@@ -144,9 +172,13 @@ local function stopNoclip()
 		noclipConnection = nil
 	end
 
-	if character then
-		enableCollision(character)
+	if descAddedConn then
+		descAddedConn:Disconnect()
+		descAddedConn = nil
 	end
+
+	restoreCollision()
+	table.clear(originalStates)
 end
 
 setToggle(false)
@@ -155,7 +187,7 @@ toggleButton.MouseButton1Click:Connect(function()
 	setToggle(not noclipEnabled)
 
 	if noclipEnabled then
-		startNoclip()
+		startNoclip(character)
 	else
 		stopNoclip()
 	end
